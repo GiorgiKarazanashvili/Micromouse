@@ -1,12 +1,11 @@
-\documentclass[11pt]{article}
-\usepackage[margin=1in]{geometry}
+\documentclass[10pt]{article}
+\usepackage[letterpaper,margin=1in]{geometry}
 \usepackage{amsmath,amssymb,amsthm}
-\usepackage{graphicx}
 \usepackage{booktabs}
 \usepackage{array}
 \usepackage{enumitem}
-\usepackage{hyperref}
-\graphicspath{{../figures/}{figures/}}
+\usepackage{graphicx}
+\usepackage[hidelinks]{hyperref}
 
 \newtheorem{theorem}{Theorem}
 \newtheorem{proposition}[theorem]{Proposition}
@@ -14,326 +13,415 @@
 \theoremstyle{definition}
 \newtheorem{definition}{Definition}
 
+\newcommand{\GK}{Giorgi Karazanashvili}
+\newcommand{\DS}{Dhruv Dharmaraj Shetty}
+\newcommand{\signoff}[2]{\par\smallskip\hfill\emph{Owner: #1}\qquad\emph{Checked by: #2}\par\medskip}
+
 \newcommand{\R}{\mathbb{R}}
 \newcommand{\E}{\mathbb{E}}
-\newcommand{\Prob}{\Pr}
-\newcommand{\norm}[1]{\left\lVert #1 \right\rVert_\infty}
-\newcommand{\sign}[2]{\par\noindent\hfill\textit{Owner: #1 \quad Checked by: #2}\par\medskip}
+\newcommand{\one}{\mathbf{1}}
+\newcommand{\norm}[1]{\left\lVert #1\right\rVert_\infty}
+\newcommand{\Sset}{\mathcal{S}}
+\newcommand{\Aset}{\mathcal{A}}
+\newcommand{\Gset}{\mathcal{G}}
 
 \title{DS5020 Final Project -- Iteration 2\\[4pt]
-\large Micromouse Maze as a Markov Decision Process:\\ Definitions, Derivations, Data and Simulation}
-\author{Giorgi Karazanashvili \and Dhruv Dharmaraj Shetty}
+\large Micromouse Maze as a Markov Decision Process:\\
+Definitions, Derivations, Data and Simulation}
+\author{\GK \and \DS}
 \date{Fall 2026 \quad Dr.\ Fatema Nafa}
 
 \begin{document}
 \maketitle
 
 \section{Project Leader and Task Ownership}
-\textbf{Project leader:} Dhruv Dharmaraj Shetty.
-The leader assigned one owner and one checker to every derivation and math question (Table~\ref{tab:tasks}); the full task table is in the Excel plan in \texttt{docs/}.
 
-\begin{table}[h]\centering\small
-\begin{tabular}{lll}\toprule
-Item & Owner & Checker \\\midrule
-Q1 -- MDP definition & Dhruv Dharmaraj Shetty & Giorgi Karazanashvili\\
-Q2 / Theorem 1 -- Bellman equation & Giorgi Karazanashvili & Dhruv Dharmaraj Shetty\\
-Q3 / Theorem 2 -- invertibility of $I-\gamma P_\pi$ & Dhruv Dharmaraj Shetty & Giorgi Karazanashvili\\
-Q4 / Theorem 3 -- contraction, value iteration & Giorgi Karazanashvili & Dhruv Dharmaraj Shetty\\
-Q5 / Proposition 5 -- Q-learning as a running mean & Dhruv Dharmaraj Shetty & Giorgi Karazanashvili\\
-Proposition 4 -- reward shaping & Giorgi Karazanashvili & Dhruv Dharmaraj Shetty\\
-Hand-worked example & Dhruv Dharmaraj Shetty & Giorgi Karazanashvili\\
-Data loading and description & Giorgi Karazanashvili & Dhruv Dharmaraj Shetty\\
-Simulation check & Giorgi Karazanashvili & Dhruv Dharmaraj Shetty\\\bottomrule
+\noindent\textbf{Project leader:} \DS. The leader assigned one owner and one checker to every derivation and math question (Table~\ref{tab:owners}); the full task table is in the Excel plan in \texttt{docs/}.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lll}
+\toprule
+Item & Owner & Checker\\
+\midrule
+Q1 -- MDP definition & \DS & \GK\\
+Q2 / Theorem~\ref{thm:bellman} -- Bellman equation & \GK & \DS\\
+Lemma~\ref{lem:eig} -- eigenvalues of a row-stochastic matrix & \DS & \GK\\
+Q3 / Theorem~\ref{thm:inv} -- invertibility of $I-\gamma P_\pi$ & \DS & \GK\\
+Lemma~\ref{lem:max} -- difference of two maxima & \GK & \DS\\
+Q4 / Theorem~\ref{thm:contraction} -- contraction, value iteration & \GK & \DS\\
+Q5 / Proposition~\ref{prop:mean} -- Q-learning as a running mean & \DS & \GK\\
+Proposition~\ref{prop:shaping} -- reward shaping & \GK & \DS\\
+Proposition~\ref{prop:goal} -- value of the absorbing goal & \DS & \GK\\
+Proposition~\ref{prop:optimal} -- value iteration finds the best value & \DS & \GK\\
+Hand-worked example & \DS & \GK\\
+Data loading and description & \GK & \DS\\
+Simulation check & \GK & \DS\\
+\bottomrule
 \end{tabular}
-\caption{Owner and checker of each item.}\label{tab:tasks}
+\caption{Owner and checker of each item.}
+\label{tab:owners}
 \end{table}
 
-%=====================================================================
+\clearpage
 \section{Notation and Definitions}
 \subsection{Notation}
-\begin{center}\small
-\begin{tabular}{>{$}l<{$} p{8.2cm} l}\toprule
-\text{Symbol} & Meaning & Dimension / set\\\midrule
-\mathcal S & set of states (maze cells), $s = W r + c$ for cell $(r,c)$ & $|\mathcal S| = n$\\
-n & number of states ($25$ in the simulation, $256$ for a real maze) & $\mathbb N$\\
-\mathcal A & actions $\{0,1,2,3\}$ = up, right, down, left & $|\mathcal A| = 4$\\
-\mathcal G & goal cells (absorbing) & $\mathcal G \subset \mathcal S$\\
-P_a & transition matrix of action $a$, $(P_a)_{ss'} = \Prob(S_{t+1}=s' \mid S_t=s, A_t=a)$ & $\R^{n\times n}$\\
-p & slip probability (each sideways direction) & $[0, \tfrac12)$\\
-R & reward vector, $R(s)$ = reward received in state $s$ & $\R^{n}$\\
-\gamma & discount factor & $[0,1)$\\
-\pi & deterministic policy, $\pi(s) \in \mathcal A$ & $\mathcal A^{n}$\\
-P_\pi & transition matrix under $\pi$, $(P_\pi)_{ss'} = (P_{\pi(s)})_{ss'}$ & $\R^{n\times n}$\\
-V^\pi & value of policy $\pi$ & $\R^{n}$\\
-V^*, Q^* & optimal state value and action value & $\R^{n}$, $\R^{n\times 4}$\\
-T & Bellman optimality operator & $\R^n \to \R^n$\\
-Q & Q-learning table & $\R^{n\times 4}$\\
-\alpha_t & Q-learning step size & $(0,1]$\\
-\varepsilon & exploration probability ($\varepsilon$-greedy) & $[0,1]$\\
-\Phi & shaping potential, $\Phi(s) = -$(distance to goal) & $\R^n$\\
-M & wall matrix of one maze file, entry = 4-bit wall code & $\{0,\dots,15\}^{16\times16}$\\
-\norm{\cdot} & max norm, $\norm{v} = \max_s |v_s|$ & \\
-\mathbf 1 & vector of ones & $\R^n$\\\bottomrule
+
+\begin{center}
+\small
+\begin{tabular}{l p{0.5\textwidth} l}
+\toprule
+Symbol & Meaning & Dimension / set\\
+\midrule
+$\Sset$ & set of states (maze cells), $s = Wr+c$ for cell $(r,c)$ & $|\Sset| = n$\\
+$n$ & number of states (25 in the simulation, 256 for a real maze) & $\mathbb{N}$\\
+$\Aset$ & actions $\{0,1,2,3\}$ = up, right, down, left & $|\Aset| = 4$\\
+$\Gset$ & goal cells (absorbing) & $\Gset\subset\Sset$\\
+$P_a$ & transition matrix of action $a$, $(P_a)_{ss'} = \Pr(S_{t+1}=s' \mid S_t = s, A_t = a)$ & $\R^{n\times n}$\\
+$p$ & slip probability (each sideways direction) & $[0,\tfrac12)$\\
+$R$ & reward vector, $R(s)$ = reward received in state $s$ & $\R^n$\\
+$\gamma$ & discount factor & $[0,1)$\\
+$\pi$ & deterministic policy, $\pi(s)\in\Aset$ & $\Aset^n$\\
+$P_\pi$ & transition matrix under $\pi$, $(P_\pi)_{ss'} = (P_{\pi(s)})_{ss'}$ & $\R^{n\times n}$\\
+$V^\pi$ & value of policy $\pi$ & $\R^n$\\
+$V^*, Q^*$ & optimal state value and action value & $\R^n$, $\R^{n\times 4}$\\
+$T$ & Bellman optimality operator & $\R^n\to\R^n$\\
+$Q$ & Q-learning table & $\R^{n\times 4}$\\
+$\alpha_t$ & Q-learning step size & $(0,1]$\\
+$\varepsilon$ & exploration probability ($\varepsilon$-greedy) & $[0,1]$\\
+$\Phi$ & shaping potential, $\Phi(s) = -(\text{distance to goal})$ & $\R^n$\\
+$M$ & wall matrix of one maze file, entry = 4-bit wall code & $\{0,\dots,15\}^{16\times16}$\\
+$\norm{\cdot}$ & max norm, $\norm{v} = \max_s |v_s|$ & \\
+$\one$ & vector of ones & $\R^n$\\
+\bottomrule
 \end{tabular}
 \end{center}
 
 \subsection{Definitions}
-\begin{definition}[Row-stochastic matrix] $P\in\R^{n\times n}$ is row-stochastic if $P_{ij}\ge 0$ and $\sum_j P_{ij}=1$ for every $i$, i.e.\ $P\mathbf 1 = \mathbf 1$.\end{definition}
-\begin{definition}[Conditional probability] $\Prob(B\mid C) = \Prob(B\cap C)/\Prob(C)$ for $\Prob(C)>0$.\end{definition}
-\begin{definition}[Markov property] A process $(S_t)$ controlled by actions $(A_t)$ is Markov if $\Prob(S_{t+1}=s' \mid S_t, A_t, S_{t-1}, A_{t-1},\dots, S_0) = \Prob(S_{t+1}=s' \mid S_t, A_t)$.\end{definition}
-\begin{definition}[Markov decision process] An MDP is a tuple $(\mathcal S,\mathcal A, \{P_a\}_{a\in\mathcal A}, R, \gamma)$ with finite $\mathcal S, \mathcal A$, row-stochastic $P_a$, a bounded reward $R$ and $\gamma\in[0,1)$.\end{definition}
-\begin{definition}[Policy and value] A deterministic policy is a map $\pi:\mathcal S\to\mathcal A$. Its value is the expected discounted return
-$V^\pi(s) = \E_\pi\!\left[\sum_{t=0}^\infty \gamma^t R(S_t) \,\middle|\, S_0=s\right].$\end{definition}
-\begin{definition}[Optimal values] $V^*(s) = \max_\pi V^\pi(s)$, and $Q^*(s,a) = R(s) + \gamma\sum_{s'}(P_a)_{ss'}V^*(s')$, the value of taking $a$ in $s$ and then acting optimally.\end{definition}
-\begin{definition}[Bellman optimality operator] $(TV)(s) = \max_{a}\big[R(s) + \gamma (P_aV)(s)\big]$.\end{definition}
-\begin{definition}[Eigenvalue] $\lambda\in\mathbb C$ is an eigenvalue of $A$ if $Av=\lambda v$ for some $v\neq 0$.\end{definition}
-\begin{definition}[Contraction] $F:\R^n\to\R^n$ is a $\gamma$-contraction in $\norm{\cdot}$ if $\norm{F(x)-F(y)}\le\gamma\norm{x-y}$ for all $x,y$, with $\gamma<1$.\end{definition}
-\begin{definition}[Expected value and variance] For a discrete random variable $X$, $\E[X]=\sum_x x\Prob(X=x)$ and $\mathrm{Var}(X)=\E[(X-\E X)^2]$.\end{definition}
+
+\begin{definition}[Row-stochastic matrix]
+$P\in\R^{n\times n}$ is row-stochastic if $P_{ij}\ge 0$ and $\sum_j P_{ij} = 1$ for every $i$, i.e.\ $P\one = \one$.
+\end{definition}
+
+\begin{definition}[Conditional probability]
+$\Pr(B\mid C) = \Pr(B\cap C)/\Pr(C)$ for $\Pr(C)>0$.
+\end{definition}
+
+\begin{definition}[Markov property]
+A process $(S_t)$ controlled by actions $(A_t)$ is Markov if $\Pr(S_{t+1}=s'\mid S_t, A_t, S_{t-1}, A_{t-1},\dots,S_0) = \Pr(S_{t+1}=s'\mid S_t, A_t)$.
+\end{definition}
+
+\begin{definition}[Markov decision process]
+An MDP is a tuple $(\Sset,\Aset,\{P_a\}_{a\in\Aset},R,\gamma)$ with finite $\Sset,\Aset$, row-stochastic $P_a$, a bounded reward $R$ and $\gamma\in[0,1)$.
+\end{definition}
+
+\begin{definition}[Policy and value]
+A deterministic policy is a map $\pi:\Sset\to\Aset$. Its value is the expected discounted return $V^\pi(s) = \E_\pi\big[\sum_{t=0}^\infty \gamma^t R(S_t)\,\big|\,S_0 = s\big]$.
+\end{definition}
+
+\begin{definition}[Optimal values]
+$V^*(s) = \max_\pi V^\pi(s)$, and $Q^*(s,a) = R(s) + \gamma\sum_{s'}(P_a)_{ss'}V^*(s')$, the value of taking $a$ in $s$ and then acting optimally.
+\end{definition}
+
+\begin{definition}[Bellman optimality operator]
+$(TV)(s) = \max_a\big[R(s) + \gamma (P_aV)(s)\big]$.
+\end{definition}
+
+\begin{definition}[Eigenvalue]
+$\lambda\in\mathbb{C}$ is an eigenvalue of $A$ if $Av = \lambda v$ for some $v\ne 0$.
+\end{definition}
+
+\begin{definition}[Contraction]
+$F:\R^n\to\R^n$ is a $\gamma$-contraction in $\norm{\cdot}$ if $\norm{F(x)-F(y)}\le\gamma\norm{x-y}$ for all $x,y$, with $\gamma<1$.
+\end{definition}
+
+\begin{definition}[Expected value and variance]
+For a discrete random variable $X$, $\E[X] = \sum_x x\Pr(X=x)$ and $\mathrm{Var}(X) = \E[(X-\E X)^2]$.
+\end{definition}
 
 \subsection{Connecting the data to the math}
+
 Our data are past Micromouse competition mazes (Section~\ref{sec:data}). One maze file gives one wall matrix $M\in\{0,\dots,15\}^{16\times16}$:
 \begin{itemize}[nosep]
-\item \textbf{one entry} $M_{rc}$ is the 4-bit code of the walls around cell $(r,c)$ (north $=1$, east $=2$, south $=4$, west $=8$);
+\item \textbf{one entry} $M_{rc}$ is the 4-bit code of the walls around cell $(r,c)$ (north = 1, east = 2, south = 4, west = 8);
 \item \textbf{one row} of $M$ is one row of 16 cells of the maze, \textbf{one column} is one column of 16 cells;
-\item \textbf{one state} is one cell, $s = 16r + c$, so $n=256$;
+\item \textbf{one state} is one cell, $s = 16r+c$, so $n = 256$;
 \item the walls fix the transition matrices: from $s$, action $a$ leads to the neighbouring cell in direction $a$ if there is no wall, and back to $s$ otherwise. With slips, $(P_a)_{ss'}$ adds $1-2p$ for the intended direction and $p$ for each sideways direction;
-\item the four cells marked \texttt{G} are the absorbing goal set $\mathcal G$; the cell marked \texttt{S} is the start state.
+\item the four cells marked \texttt{G} are the absorbing goal set $\Gset$; the cell marked \texttt{S} is the start state.
 \end{itemize}
 In the summary table \texttt{data/maze\_summary.csv}, one row is one maze and each column is one property of that maze.
 
-%=====================================================================
 \section{Assumptions}
-\begin{enumerate}[label=\textbf{A\arabic*.}]
+
+\begin{enumerate}[label=\textbf{A\arabic*.}, leftmargin=2.2em, itemsep=6pt]
 \item \textbf{Markov property.} The next cell depends only on the current cell and action.\\
-\emph{If it fails:} $V^\pi(s)$ also depends on the history, so the step in Theorem~1 that replaces the conditional expectation by $V^\pi(s')$ is invalid and $V=R+\gamma P_\pi V$ no longer holds.\\
+\emph{If it fails:} $V^\pi(s)$ also depends on the history, so the step in Theorem~\ref{thm:bellman} that replaces the conditional expectation by $V^\pi(s')$ is invalid and $V = R+\gamma P_\pi V$ no longer holds.\\
 \emph{Check in Iteration 3:} it holds in our simulator by construction. For a mouse that does not know the maze, the cell alone is not enough, so the state must also include the walls seen so far; we will state this when we move to unseen mazes.
+
 \item \textbf{Stationarity.} $P_a$ and $R$ do not change over time.\\
 \emph{If it fails:} the value function depends on $t$, and there is no single fixed point of $T$.\\
 \emph{Check:} the maze and slip probability are fixed in each run.
+
 \item \textbf{Valid transition probabilities.} Every $P_a$ is row-stochastic.\\
-\emph{If it fails:} Lemma~1 ($|\lambda|\le1$) and the averaging step in Theorem~3 break.\\
-\emph{Check:} compute $\max|P_a\mathbf 1-\mathbf 1|$ for every real maze (it is $0$ in the simulation).
+\emph{If it fails:} Lemma~\ref{lem:eig} ($|\lambda|\le 1$) and the averaging step in Theorem~\ref{thm:contraction} break.\\
+\emph{Check:} compute $\max|P_a\one - \one|$ for every real maze (it is 0 in the simulation).
+
 \item \textbf{Discount $0\le\gamma<1$.}\\
-\emph{If it fails:} for $\gamma=1$, $I-P_\pi$ is singular because $P_\pi\mathbf 1=\mathbf 1$ gives eigenvalue $1$, so $V$ is not unique; value iteration is no longer a contraction.\\
+\emph{If it fails:} for $\gamma = 1$, $I-P_\pi$ is singular because $P_\pi\one = \one$ gives eigenvalue 1, so $V$ is not unique; value iteration is no longer a contraction.\\
 \emph{Check:} $\gamma$ is set in code; we will also report how results change with $\gamma$.
+
 \item \textbf{Bounded rewards}, $|R(s)|\le R_{\max}$.\\
 \emph{If it fails:} the series $\sum_t\gamma^tR(S_t)$ may diverge.\\
-\emph{Check:} rewards are fixed constants.
+\emph{Check:} this is automatic here because there are finitely many states and the rewards are fixed numbers. We still list it because the shaping, bump and turn rewards we add in Iteration 3 also have to stay bounded.
+
 \item \textbf{Finite states and actions.}\\
 \emph{If it fails:} $P_a$ is not a matrix, and the linear-system method does not apply.\\
 \emph{Check:} 256 cells and 4 moves.
+
 \item \textbf{The goal is reachable from the start.}\\
 \emph{If it fails:} no policy reaches the goal, $V^*$ is just the discounted step cost, and the race time is undefined.\\
 \emph{Check:} flood fill on every maze. We found 2 files with an unreachable goal (Section~\ref{sec:data}); they are removed.
+
 \item \textbf{Known model} for policy evaluation and value iteration ($P_a$, $R$ known); \textbf{unknown model} for Q-learning.\\
 \emph{If it fails:} the exact methods need $P_a$, so they can only be used as the reference answer, not by the mouse itself.\\
 \emph{Check:} by design, Q-learning only sees sampled transitions.
-\item \textbf{Q-learning conditions:} every pair $(s,a)$ is tried infinitely often and the step sizes satisfy $\sum_t\alpha_t=\infty$, $\sum_t\alpha_t^2<\infty$.\\
+
+\item \textbf{Q-learning conditions:} every pair $(s,a)$ is tried infinitely often and, for each pair, the step sizes used on its visits satisfy $\sum_k\alpha_k = \infty$ and $\sum_k\alpha_k^2<\infty$.\\
 \emph{If it fails:} some $Q(s,a)$ stay at their initial value or keep fluctuating, so the greedy policy can be wrong.\\
-\emph{Check:} record the visit count of every $(s,a)$; we use $\alpha=N(s,a)^{-0.6}$ and $\varepsilon$-greedy exploration.
+\emph{Check:} record the visit count of every $(s,a)$; we use $\alpha = N(s,a)^{-0.6}$ (since $\sum_k k^{-0.6} = \infty$ and $\sum_k k^{-1.2}<\infty$) and $\varepsilon$-greedy exploration.
 \end{enumerate}
 
-%=====================================================================
-\section{Derivations}
+\section{Derivations}\label{sec:deriv}
+
 \begin{lemma}\label{lem:eig}
-If $P$ is row-stochastic, every eigenvalue satisfies $|\lambda|\le1$, and $\lambda=1$ is an eigenvalue.
+If $P$ is row-stochastic, every eigenvalue satisfies $|\lambda|\le 1$, and $\lambda = 1$ is an eigenvalue.
 \end{lemma}
 \begin{proof}
-Let $Pv=\lambda v$, $v\neq0$, and pick $i$ with $|v_i| = \norm{v} > 0$.
+Let $Pv = \lambda v$, $v\ne 0$, and pick $i$ with $|v_i| = \norm{v}>0$.
 \begin{align*}
-|\lambda|\,|v_i| = \Big|\sum_j P_{ij}v_j\Big| &\le \sum_j P_{ij}|v_j| &&\text{(triangle inequality, } P_{ij}\ge0)\\
-&\le \sum_j P_{ij}|v_i| = |v_i| &&\text{(choice of } i\text{, rows sum to 1)}.
+|\lambda|\,|v_i| = \Big|\sum_j P_{ij}v_j\Big| &\le \sum_j P_{ij}|v_j| && \text{(triangle inequality, $P_{ij}\ge0$)}\\
+&\le \sum_j P_{ij}|v_i| = |v_i| && \text{(choice of $i$, rows sum to 1).}
 \end{align*}
-Dividing by $|v_i|>0$ gives $|\lambda|\le1$. Also $P\mathbf 1=\mathbf 1$ (rows sum to 1), so $\lambda=1$ with $v=\mathbf 1$.
+Dividing by $|v_i|>0$ gives $|\lambda|\le 1$. Also $P\one = \one$ (rows sum to 1), so $\lambda = 1$ with $v = \one$.
 \end{proof}
+\signoff{\DS}{\GK}
 
 \begin{theorem}[Bellman equation for a fixed policy]\label{thm:bellman}
-For a deterministic policy $\pi$, $V^\pi = R + \gamma P_\pi V^\pi$, and $V^\pi = (I-\gamma P_\pi)^{-1}R$.
+For a deterministic policy $\pi$, $V^\pi = R+\gamma P_\pi V^\pi$, and $V^\pi = (I-\gamma P_\pi)^{-1}R$.
 \end{theorem}
 \begin{proof}
 The series in $V^\pi$ converges absolutely since $|\gamma^tR(S_t)|\le\gamma^tR_{\max}$ and $\sum_t\gamma^t = 1/(1-\gamma)$ (A4, A5, geometric series), so we may split it.
 \begin{align*}
-V^\pi(s) &= \E\Big[R(S_0) + \gamma\sum_{t\ge1}\gamma^{t-1}R(S_t)\,\Big|\,S_0=s\Big]\\
-&= R(s) + \gamma\,\E\Big[\sum_{t\ge1}\gamma^{t-1}R(S_t)\,\Big|\,S_0=s\Big] &&\text{(linearity of expectation)}\\
-&= R(s) + \gamma\sum_{s'}\Prob(S_1=s'\mid S_0=s) &&\text{(law of total}\\
-&\qquad\cdot\,\E\Big[\sum_{t\ge1}\gamma^{t-1}R(S_t)\,\Big|\,S_1=s', S_0=s\Big] &&\text{expectation)}\\
-&= R(s) + \gamma\sum_{s'}(P_\pi)_{ss'}\,V^\pi(s') &&\text{(Markov A1, stationarity A2).}
+V^\pi(s) &= \E\Big[R(S_0) + \gamma\sum_{t\ge1}\gamma^{t-1}R(S_t)\,\Big|\,S_0 = s\Big]\\
+&= R(s) + \gamma\,\E\Big[\sum_{t\ge1}\gamma^{t-1}R(S_t)\,\Big|\,S_0=s\Big] && \text{(linearity of expectation)}\\
+&= R(s) + \gamma\sum_{s'}\Pr(S_1 = s'\mid S_0 = s) && \text{(law of total}\\
+&\qquad\cdot\,\E\Big[\sum_{t\ge1}\gamma^{t-1}R(S_t)\,\Big|\,S_1 = s', S_0 = s\Big] && \text{expectation)}\\
+&= R(s) + \gamma\sum_{s'}(P_\pi)_{ss'}V^\pi(s') && \text{(Markov A1, stationarity A2).}
 \end{align*}
-In the last step, $\Prob(S_1=s'\mid S_0=s) = (P_{\pi(s)})_{ss'} = (P_\pi)_{ss'}$ by the definition of $P_\pi$, and the conditional expectation forgets $S_0$ and is the value of a process started at $s'$ one step later. Stacking over all $s$ gives the matrix form $V^\pi = R+\gamma P_\pi V^\pi$, i.e.\ $(I-\gamma P_\pi)V^\pi = R$. By Theorem~\ref{thm:inv}, $I-\gamma P_\pi$ is invertible, so $V^\pi = (I-\gamma P_\pi)^{-1}R$.
+In the last step, $\Pr(S_1 = s'\mid S_0 = s) = (P_{\pi(s)})_{ss'} = (P_\pi)_{ss'}$ by the definition of $P_\pi$, and the conditional expectation forgets $S_0$ and is the value of a process started at $s'$ one step later. Stacking over all $s$ gives the matrix form $V^\pi = R+\gamma P_\pi V^\pi$, i.e.\ $(I-\gamma P_\pi)V^\pi = R$. By Theorem~\ref{thm:inv} (proved next; its proof does not use Theorem~\ref{thm:bellman}), $I-\gamma P_\pi$ is invertible, so $V^\pi = (I-\gamma P_\pi)^{-1}R$.
 \end{proof}
-\sign{Giorgi Karazanashvili}{Dhruv Dharmaraj Shetty}
+\signoff{\GK}{\DS}
 
 \begin{theorem}[Invertibility]\label{thm:inv}
-If $P$ is row-stochastic and $0\le\gamma<1$, then $I-\gamma P$ is invertible, and $(I-\gamma P)^{-1}=\sum_{k\ge0}\gamma^kP^k$.
+If $P$ is row-stochastic and $0\le\gamma<1$, then $I-\gamma P$ is invertible, and $(I-\gamma P)^{-1} = \sum_{k\ge0}\gamma^kP^k$.
 \end{theorem}
 \begin{proof}
-Suppose $I-\gamma P$ were singular. Then $(I-\gamma P)v=0$ for some $v\ne0$ (invertible matrix theorem: singular $\Leftrightarrow$ nontrivial null space). So $Pv = \tfrac1\gamma v$ (for $\gamma>0$; if $\gamma=0$ the matrix is $I$), i.e.\ $1/\gamma$ is an eigenvalue of $P$. But $|1/\gamma|>1$, which contradicts Lemma~\ref{lem:eig}. Hence $I-\gamma P$ is invertible.
+Suppose $I-\gamma P$ were singular. Then $(I-\gamma P)v = 0$ for some $v\ne0$ (invertible matrix theorem: singular $\Leftrightarrow$ nontrivial null space). So $Pv = \frac1\gamma v$ (for $\gamma>0$; if $\gamma = 0$ the matrix is $I$), i.e.\ $1/\gamma$ is an eigenvalue of $P$. But $|1/\gamma|>1$, which contradicts Lemma~\ref{lem:eig}. Hence $I-\gamma P$ is invertible.
 
-Equivalently, the eigenvalues of $I-\gamma P$ are $1-\gamma\lambda$, and $|1-\gamma\lambda|\ge 1-\gamma|\lambda|\ge1-\gamma>0$ (reverse triangle inequality, Lemma~\ref{lem:eig}), so none is zero.
+Equivalently, the eigenvalues of $I-\gamma P$ are $1-\gamma\lambda$, and $|1-\gamma\lambda|\ge 1-\gamma|\lambda|\ge 1-\gamma>0$ (reverse triangle inequality, Lemma~\ref{lem:eig}), so none is zero.
 
-For the series: $\norm{\gamma^kP^k v}\le\gamma^k\norm{v}$ because $\norm{Pv}\le\norm{v}$ for a row-stochastic $P$ (each entry of $Pv$ is a weighted average of entries of $v$). So $S_K=\sum_{k=0}^{K}\gamma^kP^k$ converges, and $(I-\gamma P)S_K = I-\gamma^{K+1}P^{K+1}\to I$ (telescoping sum), giving the inverse.
+For the series: $\norm{\gamma^kP^kv}\le\gamma^k\norm{v}$ because $\norm{Pv}\le\norm{v}$ for a row-stochastic $P$ (each entry of $Pv$ is a weighted average of entries of $v$). So $S_K = \sum_{k=0}^K\gamma^kP^k$ converges, and $(I-\gamma P)S_K = I-\gamma^{K+1}P^{K+1}\to I$ (telescoping sum), giving the inverse.
 \end{proof}
-\sign{Dhruv Dharmaraj Shetty}{Giorgi Karazanashvili}
+\signoff{\DS}{\GK}
 
 \begin{lemma}\label{lem:max}
-For any $f,g:\mathcal A\to\R$, $\;|\max_af(a)-\max_ag(a)|\le\max_a|f(a)-g(a)|$.
+For any $f,g:\Aset\to\R$, $|\max_af(a) - \max_ag(a)|\le\max_a|f(a)-g(a)|$.
 \end{lemma}
 \begin{proof}
-Let $a^*$ maximize $f$. Then $\max f-\max g\le f(a^*)-g(a^*)\le\max_a|f(a)-g(a)|$. Swapping $f$ and $g$ gives the same bound for $\max g-\max f$.
+Let $a^*$ maximize $f$. Then $\max f - \max g\le f(a^*) - g(a^*)\le\max_a|f(a)-g(a)|$. Swapping $f$ and $g$ gives the same bound for $\max g - \max f$.
 \end{proof}
+\signoff{\GK}{\DS}
 
-\begin{theorem}[Value iteration converges]\label{thm:contr}
-$T$ is a $\gamma$-contraction in the max norm. Hence $T$ has a unique fixed point $V^*$, and value iteration $V_{k+1}=TV_k$ satisfies $\norm{V_k-V^*}\le\gamma^k\norm{V_0-V^*}$ for any start $V_0$.
+\begin{theorem}[Value iteration converges]\label{thm:contraction}
+$T$ is a $\gamma$-contraction in the max norm. Hence $T$ has a unique fixed point $V^*$, and value iteration $V_{k+1} = TV_k$ satisfies $\norm{V_k - V^*}\le\gamma^k\norm{V_0 - V^*}$ for any start $V_0$.
 \end{theorem}
 \begin{proof}
 For any $U,V\in\R^n$ and any state $s$,
 \begin{align*}
-|(TV)(s)-(TU)(s)| &\le \max_a\big|\gamma\big(P_a(V-U)\big)(s)\big| &&\text{(Lemma~\ref{lem:max}; the } R(s)\text{ terms cancel)}\\
-&\le \gamma\max_a\sum_{s'}(P_a)_{ss'}|V(s')-U(s')| &&\text{(triangle inequality, } (P_a)_{ss'}\ge0)\\
-&\le \gamma\max_a\sum_{s'}(P_a)_{ss'}\norm{V-U} = \gamma\norm{V-U} &&\text{(rows sum to 1, A3).}
+|(TV)(s) - (TU)(s)| &\le \max_a\big|\gamma\big(P_a(V-U)\big)(s)\big| && \text{(Lemma~\ref{lem:max}; the $R(s)$ terms cancel)}\\
+&\le \gamma\max_a\sum_{s'}(P_a)_{ss'}|V(s')-U(s')| && \text{(triangle inequality, $(P_a)_{ss'}\ge0$)}\\
+&\le \gamma\max_a\sum_{s'}(P_a)_{ss'}\norm{V-U} = \gamma\norm{V-U} && \text{(rows sum to 1, A3).}
 \end{align*}
 Taking the maximum over $s$: $\norm{TV-TU}\le\gamma\norm{V-U}$.
 
-\emph{Uniqueness.} If $TV=V$ and $TU=U$, then $\norm{V-U}=\norm{TV-TU}\le\gamma\norm{V-U}$, so $(1-\gamma)\norm{V-U}\le0$ and $V=U$.
+\emph{Uniqueness.} If $TV = V$ and $TU = U$, then $\norm{V-U} = \norm{TV-TU}\le\gamma\norm{V-U}$, so $(1-\gamma)\norm{V-U}\le0$ and $V = U$.
 
-\emph{Existence.} $\norm{V_{k+1}-V_k}\le\gamma^k\norm{V_1-V_0}$ by induction, so for $m>k$, $\norm{V_m-V_k}\le\sum_{j=k}^{m-1}\gamma^j\norm{V_1-V_0}\le\frac{\gamma^k}{1-\gamma}\norm{V_1-V_0}$ (triangle inequality, geometric series). The sequence is Cauchy, $\R^n$ is complete, so $V_k\to V^*$, and $V^*=TV^*$ because $T$ is continuous (it is a contraction). This is the Banach fixed-point theorem.
+\emph{Existence.} $\norm{V_{k+1}-V_k}\le\gamma^k\norm{V_1-V_0}$ by induction, so for $m>k$,
+\[
+\norm{V_m-V_k}\le\sum_{j=k}^{m-1}\gamma^j\norm{V_1-V_0}\le\frac{\gamma^k}{1-\gamma}\norm{V_1-V_0} \qquad\text{(triangle inequality, geometric series).}
+\] The sequence is Cauchy, $\R^n$ is complete, so $V_k\to V^*$, and $V^* = TV^*$ because $T$ is continuous (it is a contraction). This is the Banach fixed-point theorem.
 
-\emph{Rate.} $\norm{V_k-V^*}=\norm{TV_{k-1}-TV^*}\le\gamma\norm{V_{k-1}-V^*}\le\dots\le\gamma^k\norm{V_0-V^*}$ (induction).
+\emph{Rate.} $\norm{V_k-V^*} = \norm{TV_{k-1}-TV^*}\le\gamma\norm{V_{k-1}-V^*}\le\cdots\le\gamma^k\norm{V_0-V^*}$ (induction).
+
+Here $V^*$ is just the name of the fixed point. Proposition~\ref{prop:optimal} shows it is the same as the best value $\max_\pi V^\pi$ from Definition~6.
 \end{proof}
-\sign{Giorgi Karazanashvili}{Dhruv Dharmaraj Shetty}
+\signoff{\GK}{\DS}
 
 \begin{proposition}[Rewarding progress does not change the best route]\label{prop:shaping}
-Let $\Phi\in\R^n$ be any potential and define the shaped reward for a move $s\to s'$ as $R'(s,s') = R(s)+\gamma\Phi(s')-\Phi(s)$. Then the optimal action values of the shaped problem are $Q'^*(s,a)=Q^*(s,a)-\Phi(s)$, so $\arg\max_aQ'^*(s,a)=\arg\max_aQ^*(s,a)$: the optimal policy is unchanged.
+Let $\Phi\in\R^n$ be any potential and define the shaped reward for a move $s\to s'$ as $R'(s,s') = R(s) + \gamma\Phi(s') - \Phi(s)$. Then the optimal action values of the shaped problem are $Q'^*(s,a) = Q^*(s,a) - \Phi(s)$, so $\arg\max_aQ'^*(s,a) = \arg\max_aQ^*(s,a)$: the optimal policy is unchanged.
 \end{proposition}
 \begin{proof}
-$Q^*$ is the unique solution of $Q(s,a)=R(s)+\gamma\sum_{s'}(P_a)_{ss'}\max_{a'}Q(s',a')$ (Theorem~\ref{thm:contr} applied to $Q$). The shaped problem has the same equation with the expected reward $R(s)+\gamma\sum_{s'}(P_a)_{ss'}\Phi(s')-\Phi(s)$. Substitute $\tilde Q(s,a)=Q^*(s,a)-\Phi(s)$ into its right-hand side:
+$Q^*$ is the unique solution of $Q(s,a) = R(s) + \gamma\sum_{s'}(P_a)_{ss'}\max_{a'}Q(s',a')$ (Theorem~\ref{thm:contraction} applied to $Q$). The shaped problem has the same equation with the expected reward $R(s) + \gamma\sum_{s'}(P_a)_{ss'}\Phi(s') - \Phi(s)$. Substitute $\tilde Q(s,a) = Q^*(s,a) - \Phi(s)$ into its right-hand side:
 \begin{align*}
-&R(s)+\gamma\sum_{s'}(P_a)_{ss'}\Phi(s')-\Phi(s)+\gamma\sum_{s'}(P_a)_{ss'}\max_{a'}\big(Q^*(s',a')-\Phi(s')\big)\\
-&= R(s)-\Phi(s)+\gamma\sum_{s'}(P_a)_{ss'}\Big(\Phi(s')+\max_{a'}Q^*(s',a')-\Phi(s')\Big) &&(\Phi(s')\text{ does not depend on }a')\\
-&= Q^*(s,a)-\Phi(s) = \tilde Q(s,a) &&\text{(Bellman optimality for }Q^*).
+&R(s) + \gamma\sum_{s'}(P_a)_{ss'}\Phi(s') - \Phi(s) + \gamma\sum_{s'}(P_a)_{ss'}\max_{a'}\big(Q^*(s',a') - \Phi(s')\big)\\
+&= R(s) - \Phi(s) + \gamma\sum_{s'}(P_a)_{ss'}\Big(\Phi(s') + \max_{a'}Q^*(s',a') - \Phi(s')\Big) && \text{($\Phi(s')$ does not depend on $a'$)}\\
+&= Q^*(s,a) - \Phi(s) = \tilde Q(s,a) && \text{(Bellman optimality for $Q^*$).}
 \end{align*}
-So $\tilde Q$ solves the shaped equation, and by uniqueness $Q'^*=\tilde Q$. Since $\Phi(s)$ does not depend on $a$, subtracting it does not change which action is largest.
+So $\tilde Q$ solves the shaped equation, and by uniqueness $Q'^* = \tilde Q$. Since $\Phi(s)$ does not depend on $a$, subtracting it does not change which action is largest.
 \end{proof}
-\noindent This is the result of Ng, Harada and Russell (1999). We use it with $\Phi(s)=-(\text{distance from }s\text{ to the goal})$: the mouse gets a bonus for moving closer and an equal penalty for moving away, so it cannot farm points by going back and forth. Along any path the shaping terms telescope: $\sum_t\gamma^t(\gamma\Phi(S_{t+1})-\Phi(S_t)) = -\Phi(S_0)$ plus a vanishing tail, a constant that cannot favour one route over another.
-\sign{Giorgi Karazanashvili}{Dhruv Dharmaraj Shetty}
+\noindent This is the result of Ng, Harada and Russell (1999). We use it with $\Phi(s) = -(\text{distance from } s \text{ to the goal})$. Because $\gamma<1$, the bonus is not exactly symmetric: a move from distance $d$ to $d\mp1$ gets $d(1-\gamma)\pm\gamma$, and bumping into a wall gets $(1-\gamma)d$. So far from the goal ($d>\gamma/(1-\gamma) = 19$) even a step away gets a small positive bonus. The mouse still cannot farm points, because along any path the shaping terms telescope: $\sum_t\gamma^t(\gamma\Phi(S_{t+1}) - \Phi(S_t)) = -\Phi(S_0)$ plus a vanishing tail, which is the same constant for every route. On an unseen maze the mouse does not know the walls, so it cannot compute the maze distance; there $\Phi$ has to use a distance that does not need the walls, like the Manhattan distance to the goal.
+\signoff{\GK}{\DS}
 
 \begin{proposition}[Q-learning step as a running mean]\label{prop:mean}
-Let $x_1,x_2,\dots$ be targets and $q_n = q_{n-1}+\alpha_n(x_n-q_{n-1})$ with $\alpha_n=1/n$. Then $q_n=\frac1n\sum_{i=1}^nx_i$. If the $x_i$ are independent with mean $\mu$ and variance $\sigma^2$, then $\E[q_n]=\mu$ and $\mathrm{Var}(q_n)=\sigma^2/n$.
+Let $x_1,x_2,\dots$ be targets and $q_n = q_{n-1} + \alpha_n(x_n - q_{n-1})$ with $\alpha_n = 1/n$. Then $q_n = \frac1n\sum_{i=1}^nx_i$. If the $x_i$ are independent with mean $\mu$ and variance $\sigma^2$, then $\E[q_n] = \mu$ and $\mathrm{Var}(q_n) = \sigma^2/n$.
 \end{proposition}
 \begin{proof}
-Induction on $n$. For $n=1$: $q_1=q_0+(x_1-q_0)=x_1$. Assume $q_{n-1}=\frac1{n-1}\sum_{i<n}x_i$. Then
-$q_n = \big(1-\tfrac1n\big)q_{n-1}+\tfrac1nx_n = \tfrac{n-1}{n}\cdot\tfrac1{n-1}\sum_{i<n}x_i+\tfrac1nx_n = \tfrac1n\sum_{i\le n}x_i.$
-By linearity of expectation $\E[q_n]=\frac1n\sum\E[x_i]=\mu$. By independence the variances add: $\mathrm{Var}(q_n)=\frac1{n^2}\sum\mathrm{Var}(x_i)=\sigma^2/n$.
+Induction on $n$. For $n=1$: $q_1 = q_0 + (x_1 - q_0) = x_1$. Assume $q_{n-1} = \frac1{n-1}\sum_{i<n}x_i$. Then $q_n = \big(1-\frac1n\big)q_{n-1} + \frac1nx_n = \frac{n-1}n\cdot\frac1{n-1}\sum_{i<n}x_i + \frac1nx_n = \frac1n\sum_{i\le n}x_i$. By linearity of expectation $\E[q_n] = \frac1n\sum\E[x_i] = \mu$. By independence the variances add: $\mathrm{Var}(q_n) = \frac1{n^2}\sum\mathrm{Var}(x_i) = \sigma^2/n$.
 \end{proof}
-\sign{Dhruv Dharmaraj Shetty}{Giorgi Karazanashvili}
+\signoff{\DS}{\GK}
 
 \begin{proposition}[Value of the absorbing goal]\label{prop:goal}
-If $g\in\mathcal G$ is absorbing ($(P_a)_{gg}=1$ for all $a$) with reward $R(g)$, then $V^\pi(g)=R(g)/(1-\gamma)$ for every policy.
+If $g\in\Gset$ is absorbing ($(P_a)_{gg} = 1$ for all $a$) with reward $R(g)$, then $V^\pi(g) = R(g)/(1-\gamma)$ for every policy.
 \end{proposition}
 \begin{proof}
-From $g$ the process stays at $g$ forever, so $V^\pi(g)=\sum_{t\ge0}\gamma^tR(g)=R(g)/(1-\gamma)$ (geometric series, $\gamma<1$).
+From $g$ the process stays at $g$ forever, so $V^\pi(g) = \sum_{t\ge0}\gamma^tR(g) = R(g)/(1-\gamma)$ (geometric series, $\gamma<1$).
 \end{proof}
+\signoff{\DS}{\GK}
 
-%=====================================================================
+\begin{proposition}[Value iteration finds the best value]\label{prop:optimal}
+Let $V^*$ be the fixed point of $T$ from Theorem~\ref{thm:contraction} and let $\pi^*(s)\in\arg\max_a\big[R(s) + \gamma(P_aV^*)(s)\big]$ be the greedy policy. Then $V^{\pi^*} = V^* = \max_\pi V^\pi$, so the fixed point is the best value in Definition~6 and the greedy policy is optimal.
+\end{proposition}
+\begin{proof}
+For a policy $\pi$ write $T_\pi V = R + \gamma P_\pi V$, so $V^\pi = T_\pi V^\pi$ by Theorem~\ref{thm:bellman}.
+
+\emph{Step 1 ($T$ is monotone).} If $U\le V$ entrywise, then $(P_aU)(s)\le(P_aV)(s)$ for every $a$ because $(P_a)_{ss'}\ge0$ (A3), and taking the max over $a$ keeps the inequality. So $TU\le TV$.
+
+\emph{Step 2 (no policy beats $V^*$).} For any $\pi$, $T_\pi V\le TV$, because the max over $a$ is at least the value of the action $\pi(s)$. So $V^\pi = T_\pi V^\pi\le TV^\pi$, and applying $T$ again and again with Step 1,
+\[
+V^\pi\le TV^\pi\le T^2V^\pi\le\cdots\le T^kV^\pi\to V^* \qquad\text{(Theorem~\ref{thm:contraction}, any start).}
+\]
+So $V^\pi\le V^*$ for every policy $\pi$.
+
+\emph{Step 3 (the greedy policy reaches $V^*$).} By the choice of $\pi^*$, $T_{\pi^*}V^* = TV^* = V^*$, so $V^*$ solves $(I-\gamma P_{\pi^*})V = R$. By Theorem~\ref{thm:inv} this system has only one solution, and by Theorem~\ref{thm:bellman} that solution is $V^{\pi^*}$. So $V^* = V^{\pi^*}$.
+
+Steps 2 and 3 together give $V^* = \max_\pi V^\pi$.
+\end{proof}
+\signoff{\DS}{\GK}
+
 \section{Iteration 2 -- Math Questions}
 
-\paragraph{Q1. Define the MDP for the maze.}
+\noindent\textbf{Q1. Define the MDP for the maze.}
 \begin{itemize}[nosep]
-\item States: $\mathcal S=\{0,\dots,n-1\}$, one per cell, $s=Wr+c$ ($W$ = maze width).
-\item Actions: $\mathcal A=\{\text{up},\text{right},\text{down},\text{left}\}$.
-\item Transitions: let $\mathrm{next}(s,b)$ be the neighbour of $s$ in direction $b$, or $s$ itself if a wall or the border is in the way, and $\mathrm{next}(g,b)=g$ for goal cells. Then
-$(P_a)_{ss'} = (1-2p)\,[\mathrm{next}(s,a)=s'] + p\,[\mathrm{next}(s,a^{+})=s'] + p\,[\mathrm{next}(s,a^{-})=s']$,
-where $a^{\pm}$ are the two directions at $90^\circ$ to $a$ and $[\cdot]$ is 1 if true. Each row sums to $(1-2p)+p+p=1$, so $P_a$ is row-stochastic.
-\item Rewards: $R(s)=-1$ for every non-goal cell (time cost per step, so faster runs score more) and $R(g)=+10$ for goal cells. For training we add the shaping term of Proposition~\ref{prop:shaping}, and later a wall-bump penalty.
-\item Discount: $\gamma\in[0,1)$; we use $\gamma=0.95$.
+\item States: $\Sset = \{0,\dots,n-1\}$, one per cell, $s = Wr+c$ ($W$ = maze width).
+\item Actions: $\Aset = \{\text{up},\text{right},\text{down},\text{left}\}$.
+\item Transitions: let $\mathrm{next}(s,b)$ be the neighbour of $s$ in direction $b$, or $s$ itself if a wall or the border is in the way, and $\mathrm{next}(g,b) = g$ for goal cells. Then $(P_a)_{ss'} = (1-2p)\,[\mathrm{next}(s,a) = s'] + p\,[\mathrm{next}(s,a^+) = s'] + p\,[\mathrm{next}(s,a^-) = s']$, where $a^\pm$ are the two directions at $90^\circ$ to $a$ and $[\cdot]$ is 1 if true. Each row sums to $(1-2p)+p+p = 1$, so $P_a$ is row-stochastic.
+\item Rewards: $R(s) = -1$ for every non-goal cell (time cost per step, so faster runs score more) and $R(g) = +10$ for goal cells. For training we add the shaping term of Proposition~\ref{prop:shaping}, which does not change the best policy. Later we also want a wall-bump penalty. That penalty depends on the move and not only on the cell, so the reward becomes $r(s,a) = R(s) - c_{\mathrm{bump}}\Pr(\text{bump}\mid s,a)$. Theorems~\ref{thm:bellman}--\ref{thm:contraction} still work if $R(s)$ is replaced by $r(s,a)$ inside the max, and by $r_\pi(s) = r(s,\pi(s))$ for a fixed policy. Unlike the shaping term, the bump penalty is not of the form in Proposition~\ref{prop:shaping}, so it can change the best route.
+\item Discount: $\gamma\in[0,1)$; we use $\gamma = 0.95$.
+\item Turns (for Iteration 3): to make turns cost more time than straight moves, the state also has to remember which way the mouse is facing, so $\Sset = \text{cells}\times\{N,E,S,W\}$ and $n = 4\cdot256 = 1024$, and the time cost becomes a move-dependent $r(s,a)$ like above. All results in Section~\ref{sec:deriv} hold for any finite $n$, so the math does not change.
 \end{itemize}
-In the simulation $p=0.1$, $W=H=5$, $n=25$.
-\sign{Dhruv Dharmaraj Shetty}{Giorgi Karazanashvili}
+In the simulation $p = 0.1$, $W = H = 5$, $n = 25$.
+\signoff{\DS}{\GK}
 
-\paragraph{Q2. Bellman equation and its solution.}
-Theorem~\ref{thm:bellman}: $V^\pi=R+\gamma P_\pi V^\pi$, hence $(I-\gamma P_\pi)V^\pi=R$ and $V^\pi=(I-\gamma P_\pi)^{-1}R$.
-\sign{Giorgi Karazanashvili}{Dhruv Dharmaraj Shetty}
+\noindent\textbf{Q2. Bellman equation and its solution.} Theorem~\ref{thm:bellman}: $V^\pi = R+\gamma P_\pi V^\pi$, hence $(I-\gamma P_\pi)V^\pi = R$ and $V^\pi = (I-\gamma P_\pi)^{-1}R$.
+\signoff{\GK}{\DS}
 
-\paragraph{Q3. $I-\gamma P$ is invertible.}
-Theorem~\ref{thm:inv}, using Lemma~\ref{lem:eig} ($|\lambda|\le1$ for every eigenvalue of a row-stochastic $P$): the eigenvalues of $I-\gamma P$ satisfy $|1-\gamma\lambda|\ge1-\gamma>0$.
-\sign{Dhruv Dharmaraj Shetty}{Giorgi Karazanashvili}
+\noindent\textbf{Q3. $I-\gamma P$ is invertible.} Theorem~\ref{thm:inv}, using Lemma~\ref{lem:eig} ($|\lambda|\le1$ for every eigenvalue of a row-stochastic $P$): the eigenvalues of $I-\gamma P$ satisfy $|1-\gamma\lambda|\ge1-\gamma>0$.
+\signoff{\DS}{\GK}
 
-\paragraph{Q4. Value iteration converges to a unique fixed point.}
-Theorem~\ref{thm:contr}: $\norm{TV-TU}\le\gamma\norm{V-U}$, so $V^*$ is unique and $\norm{V_k-V^*}\le\gamma^k\norm{V_0-V^*}$.
-\sign{Giorgi Karazanashvili}{Dhruv Dharmaraj Shetty}
+\noindent\textbf{Q4. Value iteration converges to a unique fixed point.} Theorem~\ref{thm:contraction}: $\norm{TV-TU}\le\gamma\norm{V-U}$, so $V^*$ is unique and $\norm{V_k-V^*}\le\gamma^k\norm{V_0-V^*}$. By Proposition~\ref{prop:optimal} this fixed point is also the best possible value, so the greedy policy for it is optimal.
+\signoff{\GK}{\DS}
 
-\paragraph{Q5. Q-learning update as a running estimate of an expected value.}
-After taking $a$ in $s$ and observing the next cell $s'$, Q-learning updates
+\noindent\textbf{Q5. Q-learning update as a running estimate of an expected value.} After taking $a$ in $s$ and observing the next cell $s'$, Q-learning updates
 \[
-Q(s,a)\leftarrow Q(s,a)+\alpha\big(\underbrace{R(s)+\gamma\max_{a'}Q(s',a')}_{\text{target } x}-Q(s,a)\big) = (1-\alpha)Q(s,a)+\alpha x .
+Q(s,a)\leftarrow Q(s,a) + \alpha\Big(\underbrace{R(s) + \gamma\max_{a'}Q(s',a')}_{\text{target }x} - Q(s,a)\Big) = (1-\alpha)Q(s,a) + \alpha x.
 \]
-The quantity it aims at is $Q^*(s,a)=\E\big[R(s)+\gamma\max_{a'}Q^*(S',a')\,\big|\,s,a\big]$, an expected value over the random next cell $S'\sim(P_a)_{s\cdot}$. When $Q=Q^*$, one target $x$ is a single sample whose expectation is exactly $Q^*(s,a)$. The update moves the estimate a fraction $\alpha$ toward each new sample; with $\alpha=1/N(s,a)$ it is exactly the sample mean of the targets (Proposition~\ref{prop:mean}), whose variance $\sigma^2/N$ shrinks as the pair is visited more. Q-learning therefore estimates the expectation in the Bellman optimality equation from samples, without knowing $P_a$. Under A9 it converges to $Q^*$ with probability 1 (Watkins and Dayan, 1992).
-\sign{Dhruv Dharmaraj Shetty}{Giorgi Karazanashvili}
+The quantity it aims at is $Q^*(s,a) = \E\big[R(s) + \gamma\max_{a'}Q^*(S',a')\,\big|\,s,a\big]$, an expected value over the random next cell $S'\sim(P_a)_{s\cdot}$. When $Q = Q^*$, one target $x$ is a single sample whose expectation is exactly $Q^*(s,a)$. The update moves the estimate a fraction $\alpha$ toward each new sample; with $\alpha = 1/N(s,a)$ it is exactly the sample mean of the targets (Proposition~\ref{prop:mean}), whose variance $\sigma^2/N$ shrinks as the pair is visited more. Q-learning therefore estimates the expectation in the Bellman optimality equation from samples, without knowing $P_a$. Under A9 it converges to $Q^*$ with probability 1 (Watkins and Dayan, 1992).
 
-%=====================================================================
+In the simulation we use $\alpha = N(s,a)^{-0.6}$ instead of $1/N$. The targets get better as $Q$ gets better, so the early targets are out of date, and $1/N$ keeps weighting them the same forever. $N^{-0.6}$ still satisfies A9 but gives recent targets more weight. Even-Dar and Mansour (2003) show that step sizes $1/N^\omega$ with $\omega\in(1/2,1)$ converge in time polynomial in $1/(1-\gamma)$, while $1/N$ can need time exponential in $1/(1-\gamma)$.
+\signoff{\DS}{\GK}
+
 \section{Small Worked Example (by hand)}
-A corridor of three cells, $1\to2\to3$, where cell 3 is the absorbing goal. The fixed policy is ``move right''; the move succeeds with probability $0.8$ and the mouse stays put with probability $0.2$. Take $\gamma=0.9$ and $R=(-1,-1,0)^\top$.
+
+A corridor of three cells, $1\to2\to3$, where cell 3 is the absorbing goal. The fixed policy is ``move right''; the move succeeds with probability 0.8 and the mouse stays put with probability 0.2. Take $\gamma = 0.9$ and $R = (-1,-1,0)^\top$.
 \[
-P_\pi=\begin{pmatrix}0.2&0.8&0\\0&0.2&0.8\\0&0&1\end{pmatrix},\qquad
-I-\gamma P_\pi=\begin{pmatrix}0.82&-0.72&0\\0&0.82&-0.72\\0&0&0.1\end{pmatrix}.
+P_\pi = \begin{pmatrix}0.2&0.8&0\\0&0.2&0.8\\0&0&1\end{pmatrix},\qquad
+I-\gamma P_\pi = \begin{pmatrix}0.82&-0.72&0\\0&0.82&-0.72\\0&0&0.1\end{pmatrix}.
 \]
-\textbf{Policy evaluation} (back-substitution on the upper-triangular system $(I-\gamma P_\pi)V=R$):
-\begin{align*}
-0.1\,V_3&=0 &&\Rightarrow V_3=0,\\
-0.82\,V_2-0.72\cdot0&=-1 &&\Rightarrow V_2=-1/0.82=-1.2195,\\
-0.82\,V_1-0.72\,(-1.2195)&=-1 &&\Rightarrow V_1=(-1-0.8780)/0.82=-2.2903.
-\end{align*}
-\textbf{Value iteration} ($V_{k+1}=R+\gamma P_\pi V_k$, $V_0=0$):
-$V_1=(-1,-1,0)$;
-$V_2(1)=-1+0.9(0.2\cdot(-1)+0.8\cdot(-1))=-1.9$, $V_2(2)=-1+0.9(0.2\cdot(-1)+0)=-1.18$, $V_2(3)=0$, so $V_2=(-1.9,-1.18,0)$, moving toward $V$.
+\textbf{Policy evaluation} (back-substitution on the upper-triangular system $(I-\gamma P_\pi)V = R$):
+\begin{alignat*}{2}
+0.1\,V_3 &= 0 &\qquad&\Rightarrow V_3 = 0,\\
+0.82\,V_2 - 0.72\cdot0 &= -1 &&\Rightarrow V_2 = -1/0.82 = -1.2195,\\
+0.82\,V_1 - 0.72\,(-1.2195) &= -1 &&\Rightarrow V_1 = (-1-0.8780)/0.82 = -2.2903.
+\end{alignat*}
+\textbf{Iterative policy evaluation} (value iteration without the max, since the policy is fixed: $V_{k+1} = R+\gamma P_\pi V_k$, $V_0 = 0$): $V_1 = (-1,-1,0)$; $V_2(1) = -1 + 0.9\,(0.2\cdot(-1) + 0.8\cdot(-1)) = -1.9$, $V_2(2) = -1 + 0.9\,(0.2\cdot(-1) + 0) = -1.18$, $V_2(3) = 0$, so $V_2 = (-1.9,-1.18,0)$, moving toward $V$.
 
-\textbf{Code check} (\texttt{src/simulation.py}): \texttt{np.linalg.solve} gives $(-2.2903,-1.2195,0)$, and the first two value-iteration steps give $(-1,-1,0)$ and $(-1.9,-1.18,0)$, the same numbers.
+\textbf{Code check} (\texttt{src/simulation.py}): \texttt{np.linalg.solve} gives $(-2.2903,-1.2195,0)$, and the first two iteration steps give $(-1,-1,0)$ and $(-1.9,-1.18,0)$, the same numbers.
+\signoff{\DS}{\GK}
 
-%=====================================================================
 \section{Algorithm as Math}
-Notation: $n$ states, $|\mathcal A|=4$; for a real maze $n=256$, and each row of $P_a$ has at most 3 nonzero entries.
 
-\paragraph{Algorithm 1: build the MDP from a maze file.}
+Notation: $n$ states, $|\Aset| = 4$; for a real maze $n = 256$, and each row of $P_a$ has at most 3 nonzero entries.
+
+\medskip
+\noindent\textbf{Algorithm 1: build the MDP from a maze file.}
 \begin{enumerate}[nosep]
-\item Parse the file into $M\in\{0,\dots,15\}^{16\times16}$, the start cell and $\mathcal G$. \hfill $O(n)$
-\item For each $a\in\mathcal A$, $s\in\mathcal S$ and each of the 3 outcome directions $b$: $(P_a)_{s,\mathrm{next}(s,b)} \mathrel{+}= \Pr(b\mid a)$. \hfill $P_a\in\R^{n\times n}$; $12n$ updates
-\item Set $R\in\R^n$: $R(s)=-1$, $R(g)=10$. \hfill $O(n)$
+\item Parse the file into $M\in\{0,\dots,15\}^{16\times16}$, the start cell and $\Gset$. \hfill $O(n)$
+\item For each $a\in\Aset$, $s\in\Sset$ and each of the 3 outcome directions $b$: $(P_a)_{s,\mathrm{next}(s,b)} \mathrel{+}= \Pr(b\mid a)$. \hfill $P_a\in\R^{n\times n}$; $12n$ updates
+\item Set $R\in\R^n$: $R(s) = -1$, $R(g) = 10$. \hfill $O(n)$
 \end{enumerate}
 
-\paragraph{Algorithm 2: value iteration.} Start with $V_0=0\in\R^n$. For $k=0,1,2,\dots$:
+\medskip
+\noindent\textbf{Algorithm 2: value iteration.} Start with $V_0 = 0\in\R^n$. For $k = 0,1,2,\dots$:
 \begin{enumerate}[nosep]
-\item $Q_k = R\mathbf 1_4^\top+\gamma\,[P_0V_k,\;P_1V_k,\;P_2V_k,\;P_3V_k]$. \hfill $Q_k\in\R^{n\times4}$; $8n^2$ flops dense, $\approx 24n$ sparse
-\item $V_{k+1}(s)=\max_aQ_k(s,a)$. \hfill $3n$ comparisons
-\item Stop when $\norm{V_{k+1}-V_k}<\delta$. By Theorem~\ref{thm:contr} this takes about $\log(\delta/\norm{V_0-V^*})/\log\gamma$ iterations. \hfill $n$
-\item Greedy policy $\pi(s)=\arg\max_aQ(s,a)$. \hfill $3n$
+\item $Q_k = R\one_4^\top + \gamma\,[P_0V_k,\ P_1V_k,\ P_2V_k,\ P_3V_k]$. \hfill $Q_k\in\R^{n\times4}$; $8n^2$ flops dense, $\approx24n$ sparse
+\item $V_{k+1}(s) = \max_aQ_k(s,a)$. \hfill $3n$ comparisons
+\item Stop when $\norm{V_{k+1}-V_k}<\delta$. By Theorem~\ref{thm:contraction} this takes about $\log(\delta/\norm{V_0-V^*})/\log\gamma$ iterations. \hfill $n$
+\item Greedy policy $\pi(s) = \arg\max_aQ(s,a)$ (optimal by Proposition~\ref{prop:optimal}). \hfill $3n$
 \end{enumerate}
 
-\paragraph{Algorithm 3: exact policy evaluation.}
+\medskip
+\noindent\textbf{Algorithm 3: exact policy evaluation.}
 \begin{enumerate}[nosep]
 \item Form $P_\pi$, row $s$ = row $s$ of $P_{\pi(s)}$. \hfill $\R^{n\times n}$; $n^2$ copies
-\item Form $A=I-\gamma P_\pi$. \hfill $\R^{n\times n}$; $n^2$ flops
-\item Reduce $[A\mid R]$ to row-echelon form by Gaussian elimination. \hfill $\approx\tfrac23n^3$ flops ($\approx1.1\times10^7$ for $n=256$)
+\item Form $A = I-\gamma P_\pi$. \hfill $\R^{n\times n}$; $n^2$ flops
+\item Reduce $[A\mid R]$ to row-echelon form by Gaussian elimination. \hfill $\approx\frac23n^3$ flops ($\approx1.1\times10^7$ for $n = 256$)
 \item Back-substitute for $V^\pi\in\R^n$. \hfill $n^2$ flops
 \end{enumerate}
 
-\paragraph{Algorithm 4: tabular Q-learning} (model-free). $Q=0\in\R^{n\times4}$, visit counts $N=0\in\R^{n\times4}$. For each episode, start at the start cell; at each step:
+\medskip
+\noindent\textbf{Algorithm 4: tabular Q-learning} (model-free). $Q = 0\in\R^{n\times4}$, visit counts $N = 0\in\R^{n\times4}$. For each episode, start at the start cell; at each step:
 \begin{enumerate}[nosep]
-\item With probability $\varepsilon$ pick a random $a$, otherwise $a=\arg\max_{a'}Q(s,a')$. \hfill 4 comparisons
+\item With probability $\varepsilon$ pick a random $a$, otherwise $a = \arg\max_{a'}Q(s,a')$. \hfill 4 comparisons
 \item Move in the simulator, observe $s'$. \hfill $O(1)$
-\item Target $x=R(s)+\gamma\max_{a'}Q(s',a')$; if $s'\in\mathcal G$, use $\max_{a'}Q(s',a')=R(g)/(1-\gamma)$ (Proposition~\ref{prop:goal}). \hfill 4 comparisons, 2 flops
-\item $N(s,a)\mathrel{+}=1$, $\alpha=N(s,a)^{-0.6}$, $Q(s,a)\leftarrow Q(s,a)+\alpha(x-Q(s,a))$. \hfill 3 flops
+\item Target $x = R(s) + \gamma\max_{a'}Q(s',a')$; if $s'\in\Gset$, use $\max_{a'}Q(s',a') = R(g)/(1-\gamma)$ (Proposition~\ref{prop:goal}). \hfill 4 comparisons, 2 flops
+\item $N(s,a)\mathrel{+}=1$, $\alpha = N(s,a)^{-0.6}$, $Q(s,a)\leftarrow Q(s,a) + \alpha(x - Q(s,a))$. \hfill 3 flops
 \item $s\leftarrow s'$; stop the episode at the goal or after 200 steps.
 \end{enumerate}
-Each step costs $O(|\mathcal A|)$, independent of $n$; the memory is $4n$ numbers.
+Each step costs $O(|\Aset|)$, independent of $n$; the memory is $8n$ numbers ($Q$ and the visit counts $N$).
 
-%=====================================================================
 \section{Data}\label{sec:data}
-\textbf{Source.} Past Micromouse competition mazes collected by the Micromouse community (\url{https://github.com/micromouseonline/mazefiles}, folder \texttt{classic}): plain-text $16\times16$ maze files from contests such as the All Japan Micromouse Contest, APEC, AAMC and UK contests. The loader is \texttt{src/load\_data.py}; the README explains how to download the files.
+
+\noindent\textbf{Source.} Past Micromouse competition mazes collected by the Micromouse community (\url{https://github.com/micromouseonline/mazefiles}, folder \texttt{classic}): plain-text $16\times16$ maze files from contests such as the All Japan Micromouse Contest, APEC, AAMC and UK contests. The loader is \texttt{src/load\_data.py}; the README explains how to download the files.
 
 \textbf{Description.} 525 files were found and all parse as $16\times16$ mazes with 4 goal cells and the start in the bottom-left corner. From each maze we computed one row of \texttt{data/maze\_summary.csv}:
-\begin{center}\small
-\begin{tabular}{lll}\toprule
-Column & Type & Meaning\\\midrule
+
+\begin{center}
+\small
+\begin{tabular}{lll}
+\toprule
+Column & Type & Meaning\\
+\midrule
 \texttt{maze} & string & file name\\
 \texttt{rows}, \texttt{cols} & integer & maze size (always 16)\\
 \texttt{goal\_cells} & integer & number of \texttt{G} cells (always 4)\\
@@ -341,60 +429,73 @@ Column & Type & Meaning\\\midrule
 \texttt{open\_sides} & integer & cell sides without a wall\\
 \texttt{dead\_ends} & integer & cells with 3 walls\\
 \texttt{unreachable\_cells} & integer & cells with no path to the goal\\
-\texttt{shortest\_path} & float & flood-fill distance from start to goal (cells)\\\bottomrule
+\texttt{shortest\_path} & float & flood-fill distance from start to goal (cells)\\
+\bottomrule
 \end{tabular}
 \end{center}
+
 \textbf{Missing values.} No file is missing a goal or start. \texttt{shortest\_path} is missing for 2 files (\texttt{001.txt}, \texttt{001-anomaly-test.txt}) because their goal cannot be reached from the start (A7); these are test files and will be removed. A few other files are synthetic test layouts rather than contest mazes (\texttt{empty}, \texttt{long}, \texttt{wiggly1}, \texttt{zigzag}); they explain the extreme values below, and we will keep them only as stress tests.
 
-\textbf{Summary.} The shortest start-to-goal path has mean $59.3$ cells (standard deviation $27.9$, median $54$, range $14$--$251$). Mazes have on average $26.8$ dead ends. Most mazes have a few walled-off cells (median 1), which the mouse can never enter.
+\textbf{Summary.} The shortest start-to-goal path has mean 59.3 cells (standard deviation 27.9, median 54, range 14--251). Mazes have on average 26.8 dead ends. Most mazes have a few walled-off cells (median 1), which the mouse can never enter.
 
-\begin{figure}[h]\centering
-\includegraphics[width=0.48\textwidth]{maze_example.png}\hfill
-\includegraphics[width=0.5\textwidth]{path_length_hist.png}
+\begin{figure}[h]
+\centering
+\begin{minipage}{0.47\textwidth}
+\centering
+\includegraphics[width=\linewidth]{figures/maze_floodfill.png}
+\end{minipage}\hfill
+\begin{minipage}{0.5\textwidth}
+\centering
+\includegraphics[width=\linewidth]{figures/shortest_path_hist.png}
+\end{minipage}
 \caption{Left: the AAMC 2023 maze coloured by flood-fill distance to the goal, with the shortest path in red. Right: shortest path length across all mazes.}
+\label{fig:data}
 \end{figure}
+\signoff{\GK}{\DS}
 
-%=====================================================================
 \section{Simulation Check}
-\textbf{Model.} The $5\times5$ grid from the project sheet with wall cells $(1,1),(1,2),(1,3),(3,1),(3,3)$, goal $(4,4)$ (absorbing), slip probability $p=0.1$ to each side ($0.8$ intended), $R=-1$ per step, $R(\text{goal})=10$, $\gamma=0.95$. Random seed \texttt{np.random.default\_rng(0)}. Q-learning: $20{,}000$ episodes, $\varepsilon=0.2$, $\alpha=N(s,a)^{-0.6}$, random start cell, at most 200 steps. Script: \texttt{src/simulation.py}.
 
-\begin{center}\small
-\begin{tabular}{p{6.2cm}ll}\toprule
-Quantity & True / predicted & Estimate from code\\\midrule
-Row sums of every $P_a$ & 1 & $\max|P_a\mathbf1-\mathbf1|=0$\\
-$\max|\lambda(P_\pi)|$ & $\le1$ (Lemma 1) & $1.000$\\
-$\min|\lambda(I-\gamma P_\pi)|$ & $\ge1-\gamma=0.05$ (Thm 2) & $0.05$\\
-$V$ from value iteration vs.\ linear solve & equal (Thms 1, 3) & $\max$ difference $1.8\times10^{-11}$\\
-Error ratio $\norm{V_{k+1}-V^*}/\norm{V_k-V^*}$ & $\le\gamma=0.95$ (Thm 3) & $\max=0.95$\\
-$V(\text{goal})$ & $10/(1-\gamma)=200$ (Prop 6) & $200.0$\\
-Shaped $Q'^*$ vs.\ $Q^*-\Phi$ & equal (Prop 4) & $\max$ difference $1.7\times10^{-11}$\\
+\noindent\textbf{Model.} The $5\times5$ grid from the project sheet with wall cells $(1,1)$, $(1,2)$, $(1,3)$, $(3,1)$, $(3,3)$, goal $(4,4)$ (absorbing), slip probability $p = 0.1$ to each side (0.8 intended), $R = -1$ per step, $R(\text{goal}) = 10$, $\gamma = 0.95$. Random seed \texttt{np.random.default\_rng(0)}. Q-learning: 20{,}000 episodes, $\varepsilon = 0.2$, $\alpha = N(s,a)^{-0.6}$, random start cell, at most 200 steps. Script: \texttt{src/simulation.py}.
+
+\begin{center}
+\small
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.34\textwidth}>{\raggedright\arraybackslash}p{0.27\textwidth}>{\raggedright\arraybackslash}p{0.3\textwidth}}
+\toprule
+Quantity & True / predicted & Estimate from code\\
+\midrule
+Row sums of every $P_a$ & 1 & $\max|P_a\one-\one| = 0$\\
+$\max|\lambda(P_\pi)|$ & $\le1$ (Lemma~\ref{lem:eig}) & 1.000\\
+$\min|\lambda(I-\gamma P_\pi)|$ & $\ge1-\gamma = 0.05$ (Thm~\ref{thm:inv}) & 0.05\\
+$V$ from value iteration vs.\ linear solve & equal (Thms~\ref{thm:bellman}, \ref{thm:contraction}) & max difference $1.8\times10^{-11}$\\
+Error ratio $\norm{V_{k+1}-V^*}/\norm{V_k-V^*}$ & $\le\gamma = 0.95$ (Thm~\ref{thm:contraction}) & max = 0.95\\
+$V(\text{goal})$ & $10/(1-\gamma) = 200$ (Prop~\ref{prop:goal}) & 200.0\\
+$V(\text{start }(0,0))$ & exact solution & 112.67\\
+Shaped $Q'^*$ vs.\ $Q^*-\Phi$ & equal (Prop~\ref{prop:shaping}) & max difference $1.7\times10^{-11}$\\
 Optimal policy with shaping & same as without & same in all 20 open cells\\
-Running estimate, $\alpha=1/n$, 1000 samples & sample mean $2.903943$ (Prop 5) & $2.903943$\\
+Running estimate, $\alpha = 1/n$, 1000 samples & sample mean 2.903943 (Prop~\ref{prop:mean}) & 2.903943\\
 Q-learning greedy policy & optimal policy from VI & optimal in 19/19 non-goal cells\\
-$\max|Q-Q^*|$ over open cells & $\to0$ & $1.68$\\\bottomrule
+$\max|Q-Q^*|$ over open cells & $\to0$ & 1.68\\
+\bottomrule
 \end{tabular}
 \end{center}
 
-\begin{figure}[h]\centering
-\includegraphics[width=0.6\textwidth]{vi_convergence.png}
-\caption{Max-norm error of value iteration (solid) stays under the bound $\gamma^k\norm{V_0-V^*}$ (dashed), as Theorem 3 predicts.}
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.56\textwidth]{figures/value_iteration_error.png}
+\caption{Max-norm error of value iteration (solid) stays under the bound $\gamma^k\norm{V_0-V^*}$ (dashed), as Theorem~\ref{thm:contraction} predicts.}
+\label{fig:vi}
 \end{figure}
 
 \noindent What each result confirms:
 \begin{itemize}[nosep]
 \item \textbf{Q1:} every $P_a$ is row-stochastic, so the MDP is well defined.
-\item \textbf{Q2 / Theorem 1:} the linear-system solution $(I-\gamma P_\pi)^{-1}R$ equals the value-iteration solution to $10^{-11}$.
-\item \textbf{Q3 / Theorem 2:} all eigenvalues of $P_\pi$ have $|\lambda|\le1$, and the smallest eigenvalue modulus of $I-\gamma P_\pi$ is exactly $1-\gamma$, so the matrix is invertible.
-\item \textbf{Q4 / Theorem 3:} the error shrinks by at most a factor $\gamma$ each step and stays under the $\gamma^k$ bound.
-\item \textbf{Proposition 4:} the progress reward shifts $Q^*$ by $-\Phi(s)$ only, and leaves the best route unchanged.
-\item \textbf{Q5 / Proposition 5:} the $1/n$ update reproduces the sample mean exactly, and Q-learning, which never sees $P_a$, learns the same policy as value iteration in every cell. Its $Q$-values are still within $1.7$ of $Q^*$ (out of values around 100--200), consistent with an estimate whose variance shrinks only as visits grow.
+\item \textbf{Q2 / Theorem~\ref{thm:bellman}:} the linear-system solution $(I-\gamma P_\pi)^{-1}R$ equals the value-iteration solution to $10^{-11}$.
+\item \textbf{Q3 / Theorem~\ref{thm:inv}:} all eigenvalues of $P_\pi$ have $|\lambda|\le1$, and the smallest eigenvalue modulus of $I-\gamma P_\pi$ is exactly $1-\gamma$, so the matrix is invertible.
+\item \textbf{Q4 / Theorem~\ref{thm:contraction}:} the error shrinks by at most a factor $\gamma$ each step and stays under the $\gamma^k$ bound.
+\item \textbf{Proposition~\ref{prop:shaping}:} the progress reward shifts $Q^*$ by $-\Phi(s)$ only, and leaves the best route unchanged.
+\item \textbf{Q5 / Proposition~\ref{prop:mean}:} the $1/n$ update reproduces the sample mean exactly, and Q-learning, which never sees $P_a$, learns the same policy as value iteration in every cell. Its $Q$-values are still within 1.7 of $Q^*$ (out of values around 100--200), consistent with an estimate whose variance shrinks only as visits grow.
 \end{itemize}
+\signoff{\GK}{\DS}
 
-\section*{References}
-\begin{itemize}[nosep]
-\item Ng, A.\ Y., Harada, D., Russell, S.\ (1999). Policy invariance under reward transformations: theory and application to reward shaping. \emph{ICML}.
-\item Watkins, C.\ J.\ C.\ H., Dayan, P.\ (1992). Q-learning. \emph{Machine Learning} 8, 279--292.
-\item Micromouse maze files: \url{https://github.com/micromouseonline/mazefiles}.
-\end{itemize}
 
 \end{document}
