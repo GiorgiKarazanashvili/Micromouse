@@ -10,7 +10,7 @@ competition mazes as fast as possible.
 ## Repository layout
 
 ```
-src/        maze parser, data loading, simulation check
+src/        maze parser, data loading, methods, simulation and real-data scripts
 data/       maze summary (raw maze files are downloaded, not in Git)
 figures/    plots produced by the scripts
 ```
@@ -42,8 +42,19 @@ From the repository root:
 ```
 python src/load_data.py
 python src/simulation.py
+python src/small_example.py
+python src/check_simulation.py
+python src/run_real.py
 ```
 
 `load_data.py` describes the real mazes and writes `data/maze_summary.csv` and two figures.
 `simulation.py` runs the hand-worked example and the simulation check of the Iteration 2 derivations.
+`small_example.py` solves a 3 x 3 maze step by step: exact transition matrices, policy evaluation with our
+Gaussian elimination, value iteration after every step, and Q-learning (Iteration 3, Q1-Q4).
+`check_simulation.py` runs the Iteration 2 5 x 5 simulation against the true values and against NumPy,
+the Q-learning error for 500, 5000 and 50000 episodes, the gamma = 0.999 stress test and the assumption checks.
+`run_real.py` cleans the competition mazes, draws a parsed maze, compares our solvers with NumPy on every maze,
+trains Q-learning on competition mazes and on the unseen maze `AAMC24Maze.txt` (Q5), and checks the assumptions
+(about 3 minutes).
+The methods are in `src/methods.py` (NumPy only); `src/simulate.py` builds the simulation model.
 All randomness uses `np.random.default_rng(0)`.
